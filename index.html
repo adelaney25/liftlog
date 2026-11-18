@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>LiftLog</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#11151c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LiftLog">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<script src="https://cdn.tailwindcss.com/3.4.17" crossorigin="anonymous"></script>
+<script>tailwind.config={theme:{extend:{colors:{iron:'#11151c',steel:'#1b222d',rail:'#2a3342',chalk:'#e9ecf1',plate:'#3b7bff',pred:'#ef4b3f',pyel:'#f4c430'}}}}</script>
+<script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide-react@0.383.0/dist/umd/lucide-react.min.js" crossorigin="anonymous"></script>
+<style>
+html,body,#root{height:100%}
+body{background:#11151c;overscroll-behavior:none;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;font-variant-numeric:tabular-nums;font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif}
+input,select{-webkit-user-select:text;user-select:text;font-size:16px}
+button{touch-action:manipulation}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const {useState,useEffect,useMemo}=React;
+const html=htm.bind(React.createElement);
+const L=window.lucideReact||window.LucideReact||{};
+const ic=n=>L[n]||(()=>null);
+const Dumbbell=ic('Dumbbell'),TrendingUp=ic('TrendingUp'),Settings=ic('Settings'),Plus=ic('Plus'),Trash2=ic('Trash2'),Check=ic('Check'),X=ic('X'),Timer=ic('Timer'),Download=ic('Download'),Upload=ic('Upload'),Search=ic('Search');
+
+const EX=["Barbell Squat","Front Squat","Leg Press","Romanian Deadlift","Deadlift","Sumo Deadlift","Bench Press","Incline Bench Press","Dumbbell Bench Press","Overhead Press","Dumbbell Shoulder Press","Barbell Row","Dumbbell Row","Pull-up","Chin-up","Lat Pulldown","Seated Cable Row","Dip","Biceps Curl","Triceps Pushdown","Lateral Raise","Face Pull","Hip Thrust","Leg Curl","Leg Extension","Calf Raise"];
+const KEY='liftlog.v1';
+const DEF={sessions:[],active:null,unit:'lb',rest:90,custom:[]};
+const load=()=>{try{return{...DEF,...JSON.parse(localStorage.getItem(KEY)||'{}')}}catch(e){return{...DEF}}};
+const e1=(w,r)=>r<=1?w:w*(1+r/30);
+const fmt=n=>Math.round(n*10)/10;
+const fd=s=>new Date(s).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+const lastSets=(ss,name)=>{for(let i=ss.length-1;i>=0;i--){const e=ss[i].exercises.find(x=>x.name===name);if(e&&e.sets.length)return e.sets}return[]};
+const beep=()=>{try{const a=new(window.AudioContext||window.webkitAudioContext)(),o=a.createOscillator(),g=a.createGain();o.connect(g);g.connect(a.destination);g.gain.value=.15;o.frequency.value=880;o.start();o.stop(a.currentTime+.4)}catch(e){}try{navigator.vibrate&&navigator.vibrate([200,100,200])}catch(e){}};
+const card='bg-steel rounded-xl p-4';
+const btn='rounded-lg font-semibold active:opacity-70 flex items-center justify-center gap-2';
+
+function RestBar({t,clear,add}){
+  const [now,setNow]=useState(Date.now());
+  useEffect(()=>{const i=setInterval(()=>setNow(Date.now()),250);return()=>clearInterval(i)},[]);
+  const left=Math.max(0,Math.ceil((t.end-now)/1000));
+  useEffect(()=>{if(left===0){beep();const h=setTimeout(clear,3000);return()=>clearTimeout(h)}},[left===0]);
+  const m=Math.floor(left/60),s=String(left%60).padStart(2,'0');
+  return html`<div className="bg-steel border-t border-rail px-4 py-3">
+    <div className="flex items-center gap-3">
+      <${Timer} size=${20} className=${left?'text-plate':'text-pyel'}/>
+      <div className="text-3xl font-bold w-24">${left?`${m}:${s}`:'Go lift'}</div>
+      <div className="flex-1"/>
+      <button className=${btn+' bg-rail px-3 py-2 text-sm'} onClick=${()=>add(-15)}>-15s</button>
+      <button className=${btn+' bg-rail px-3 py-2 text-sm'} onClick=${()=>add(15)}>+15s</button>
+      <button className=${btn+' bg-rail p-2'} onClick=${clear} aria-label="Skip rest"><${X} size=${18}/></button>
+    </div>
+    <div className="h-1 bg-rail rounded mt-3"><div className="h-1 bg-plate rounded" style=${{width:(left/t.total*100)+'%',transition:'width .25s linear'}}/></div>
+  </div>`;
+}
+
+function Picker({names,onPick,onClose,onNew}){
+  const [q,setQ]=useState('');
+  const f=names.filter(n=>n.toLowerCase().includes(q.toLowerCase()));
+  const exact=names.some(n=>n.toLowerCase()===q.trim().toLowerCase());
+  return html`<div className="fixed inset-0 z-20 bg-iron flex flex-col" style=${{paddingTop:'env(safe-area-inset-top)'}}>
+    <div className="flex items-center gap-2 p-4">
+      <div className="flex-1 flex items-center gap-2 bg-steel rounded-lg px-3"><${Search} size=${18} className="text-chalk/50"/>
+        <input autoFocus className="bg-transparent flex-1 py-3 outline-none" placeholder="Search or add exercise" value=${q} onChange=${e=>setQ(e.target.value)}/></div>
+      <button className="px-2 py-3 text-plate font-semibold" onClick=${onClose}>Cancel</button>
+    </div>
+    <div className="flex-1 overflow-y-auto px-4 pb-8">
+      ${q.trim()&&!exact&&html`<button className=${btn+' w-full bg-plate py-3 mb-2'} onClick=${()=>onNew(q.trim())}><${Plus} size=${18}/>Add "${q.trim()}"</button>`}
+      ${f.map(n=>html`<button key=${n} className="w-full text-left py-3.5 border-b border-rail active:bg-steel" onClick=${()=>onPick(n)}>${n}</button>`)}
+    </div>
+  </div>`;
+}
+
+function Ex({ex,i,d,upd,rest}){
+  const prev=useMemo(()=>lastSets(d.sessions,ex.name),[d.sessions,ex.name]);
+  const seed=ex.sets[ex.sets.length-1]||prev[0]||{w:'',r:''};
+  const [w,setW]=useState(String(seed.w));
+  const [r,setR]=useState(String(seed.r));
+  const log=()=>{const W=parseFloat(w),R=parseInt(r);if(!(W>=0)||!(R>0))return;upd(x=>{x.active.exercises[i].sets.push({w:W,r:R})});rest()};
+  const inp='bg-iron border border-rail rounded-lg py-3 text-center text-xl font-bold w-full outline-none focus:border-plate';
+  return html`<div className=${card}>
+    <div className="flex items-start justify-between">
+      <div className="font-bold text-lg">${ex.name}</div>
+      <button aria-label="Remove exercise" className="p-1 text-chalk/40" onClick=${()=>upd(x=>{x.active.exercises.splice(i,1)})}><${X} size=${18}/></button>
+    </div>
+    <div className="text-sm text-chalk/60 mb-3">${prev.length?'Last: '+prev.map(s=>`${s.w}×${s.r}`).join('  '):'No previous sets'}</div>
+    ${ex.sets.map((s,j)=>html`<div key=${j} className="flex items-center py-2 border-b border-rail">
+      <div className="w-8 text-chalk/50">${j+1}</div>
+      <div className="flex-1 text-lg font-semibold">${s.w} ${d.unit} × ${s.r}</div>
+      <div className="text-sm text-chalk/50 mr-3">e1RM ${fmt(e1(s.w,s.r))}</div>
+      <button aria-label="Delete set" className="p-1 text-pred" onClick=${()=>upd(x=>{x.active.exercises[i].sets.splice(j,1)})}><${Trash2} size=${16}/></button>
+    </div>`)}
+    <div className="flex items-end gap-2 mt-3">
+      <label className="flex-1 text-xs text-chalk/60">${d.unit}<input inputMode="decimal" className=${inp} value=${w} onChange=${e=>setW(e.target.value)}/></label>
+      <label className="flex-1 text-xs text-chalk/60">reps<input inputMode="numeric" className=${inp} value=${r} onChange=${e=>setR(e.target.value)}/></label>
+      <button className=${btn+' bg-plate h-[54px] px-5'} onClick=${log}><${Check} size=${20}/>Log set</button>
+    </div>
+  </div>`;
+}
+
+function Log({d,upd,rest}){
+  const [pick,setPick]=useState(false);
+  const a=d.active;
+  const names=[...EX,...d.custom].sort();
+  const add=n=>{upd(x=>{x.active.exercises.push({name:n,sets:[]})});setPick(false)};
+  if(!a)return html`<div>
+    <button className=${btn+' w-full bg-plate py-4 text-lg'} onClick=${()=>upd(x=>{x.active={date:new Date().toISOString(),exercises:[]}})}><${Dumbbell} size=${22}/>Start workout</button>
+    <div className="mt-6 mb-2 text-chalk/60 text-sm">Recent workouts</div>
+    ${d.sessions.length===0&&html`<div className=${card+' text-chalk/60'}>Nothing logged yet. Start a workout and your sets will show up here.</div>`}
+    ${d.sessions.slice(-5).reverse().map(s=>html`<div key=${s.id} className=${card+' mb-2'}>
+      <div className="font-semibold">${fd(s.date)}</div>
+      <div className="text-sm text-chalk/60">${s.exercises.map(e=>`${e.name} (${e.sets.length})`).join(', ')}</div></div>`)}
+  </div>`;
+  const total=a.exercises.reduce((n,e)=>n+e.sets.length,0);
+  const finish=()=>upd(x=>{const ex=x.active.exercises.filter(e=>e.sets.length);if(ex.length)x.sessions.push({id:Date.now(),date:x.active.date,exercises:ex});x.active=null});
+  return html`<div className="space-y-3">
+    ${a.exercises.map((e,i)=>html`<${Ex} key=${e.name+i} ex=${e} i=${i} d=${d} upd=${upd} rest=${rest}/>`)}
+    <button className=${btn+' w-full bg-steel border border-rail py-3.5'} onClick=${()=>setPick(true)}><${Plus} size=${18}/>Add exercise</button>
+    <button className=${btn+' w-full py-3.5 '+(total?'bg-pyel text-iron':'bg-steel text-pred')} onClick=${()=>{if(total||confirm('Discard this empty workout?'))finish()}}>${total?'Finish workout':'Discard workout'}</button>
+    ${pick&&html`<${Picker} names=${names} onPick=${add} onClose=${()=>setPick(false)} onNew=${n=>{upd(x=>{x.custom.push(n)});add(n)}}/>`}
+  </div>`;
+}
+
+function Chart({pts,k,title,unit,color}){
+  const W=320,H=150,p=28;
+  const v=pts.map(x=>x[k]);let lo=Math.min(...v),hi=Math.max(...v);if(lo===hi){lo-=1;hi+=1}
+  const X=i=>pts.length<2?W/2:p+i*(W-2*p)/(pts.length-1);
+  const Y=y=>H-p+4-(y-lo)/(hi-lo)*(H-2*p);
+  const path=pts.map((q,i)=>(i?'L':'M')+X(i)+','+Y(q[k])).join('');
+  return html`<div className=${card}>
+    <div className="flex justify-between items-baseline"><div className="font-semibold">${title}</div><div className="text-2xl font-bold" style=${{color}}>${fmt(v[v.length-1])} <span className="text-sm text-chalk/50">${unit}</span></div></div>
+    <svg viewBox="0 0 ${W} ${H}" className="w-full mt-2">
+      <line x1=${p} x2=${W-p} y1=${Y(lo)} y2=${Y(lo)} stroke="#2a3342"/><line x1=${p} x2=${W-p} y1=${Y(hi)} y2=${Y(hi)} stroke="#2a3342"/>
+      <path d=${path} fill="none" stroke=${color} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round"/>
+      ${pts.map((q,i)=>html`<circle key=${i} cx=${X(i)} cy=${Y(q[k])} r="4" fill=${color}/>`)}
+      <text x=${p} y=${Y(hi)-6} fill="#8b95a5" fontSize="11">${fmt(hi)}</text>
+      <text x=${p} y=${Y(lo)+14} fill="#8b95a5" fontSize="11">${fmt(lo)}</text>
+      <text x=${p} y=${H-2} fill="#8b95a5" fontSize="11">${fd(pts[0].date)}</text>
+      <text x=${W-p} y=${H-2} fill="#8b95a5" fontSize="11" textAnchor="end">${fd(pts[pts.length-1].date)}</text>
+    </svg></div>`;
+}
+
+function Progress({d}){
+  const names=[...new Set(d.sessions.flatMap(s=>s.exercises.map(e=>e.name)))].sort();
+  const [n,setN]=useState(names[0]||'');
+  if(!names.length)return html`<div className=${card+' text-chalk/60'}>Finish a workout to see your estimated 1RM and volume charts.</div>`;
+  const name=names.includes(n)?n:names[0];
+  const pts=[...d.sessions].sort((a,b)=>new Date(a.date)-new Date(b.date)).filter(s=>s.exercises.some(e=>e.name===name)).map(s=>{
+    const sets=s.exercises.filter(e=>e.name===name).flatMap(e=>e.sets);
+    return{date:s.date,e1:Math.max(...sets.map(t=>e1(t.w,t.r))),vol:sets.reduce((a,t)=>a+t.w*t.r,0)}});
+  const best=Math.max(...pts.map(p=>p.e1));
+  return html`<div className="space-y-3">
+    <select className="w-full bg-steel rounded-lg p-3 font-semibold outline-none" value=${name} onChange=${e=>setN(e.target.value)}>${names.map(x=>html`<option key=${x}>${x}</option>`)}</select>
+    <div className="text-sm text-chalk/60">${pts.length} workout${pts.length>1?'s':''} · best estimated 1RM ${fmt(best)} ${d.unit}</div>
+    <${Chart} pts=${pts} k="e1" title="Estimated 1RM" unit=${d.unit} color="#ef4b3f"/>
+    <${Chart} pts=${pts} k="vol" title="Volume per workout" unit=${d.unit} color="#f4c430"/>
+    <div className="text-xs text-chalk/40">Estimated 1RM uses the Epley formula on your best set each workout. Volume is weight × reps summed over all sets.</div>
+  </div>`;
+}
+
+function Prefs({d,upd,setD}){
+  const exportData=async()=>{
+    const name=`liftlog-${new Date().toISOString().slice(0,10)}.json`;
+    const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
+    const file=new File([blob],name,{type:'application/json'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file]});return}catch(e){if(e.name==='AbortError')return}}
+    const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);
+  };
+  const importData=ev=>{
+    const f=ev.target.files[0];if(!f)return;
+    const rd=new FileReader();
+    rd.onload=()=>{try{const j=JSON.parse(rd.result);if(!Array.isArray(j.sessions))throw 0;
+      if(confirm(`Replace current data with this backup (${j.sessions.length} workouts)?`))setD({...DEF,...j})}catch(e){alert('That file is not a valid LiftLog backup.')}};
+    rd.readAsText(f);ev.target.value='';
+  };
+  return html`<div className="space-y-3">
+    <div className=${card}><div className="font-semibold mb-2">Units</div>
+      <div className="flex gap-2">${['lb','kg'].map(u=>html`<button key=${u} className=${btn+' flex-1 py-3 '+(d.unit===u?'bg-plate':'bg-rail')} onClick=${()=>upd(x=>{x.unit=u})}>${u}</button>`)}</div></div>
+    <div className=${card}><div className="font-semibold mb-2">Default rest</div>
+      <div className="flex items-center gap-3">
+        <button className=${btn+' bg-rail w-12 h-12 text-xl'} onClick=${()=>upd(x=>{x.rest=Math.max(15,x.rest-15)})}>−</button>
+        <div className="flex-1 text-center text-2xl font-bold">${Math.floor(d.rest/60)}:${String(d.rest%60).padStart(2,'0')}</div>
+        <button className=${btn+' bg-rail w-12 h-12 text-xl'} onClick=${()=>upd(x=>{x.rest+=15})}>+</button></div></div>
+    <div className=${card}><div className="font-semibold">Backup</div>
+      <div className="text-sm text-chalk/60 mb-3">${d.sessions.length} workouts stored on this device. Export saves a JSON file you can keep in Files or send to yourself.</div>
+      <button className=${btn+' w-full bg-plate py-3 mb-2'} onClick=${exportData}><${Download} size=${18}/>Export backup</button>
+      <label className=${btn+' w-full bg-rail py-3'}><${Upload} size=${18}/>Import backup<input type="file" accept="application/json,.json" className="hidden" onChange=${importData}/></label></div>
+    <button className=${btn+' w-full bg-steel text-pred py-3'} onClick=${()=>{if(confirm('Delete all workouts on this device? Export a backup first.'))setD({...DEF})}}>Delete all data</button>
+  </div>`;
+}
+
+function App(){
+  const [d,setD]=useState(load);
+  const [tab,setTab]=useState('log');
+  const [t,setT]=useState(null);
+  useEffect(()=>{try{localStorage.setItem(KEY,JSON.stringify(d))}catch(e){}},[d]);
+  const upd=f=>setD(x=>{const y=JSON.parse(JSON.stringify(x));f(y);return y});
+  const rest=()=>setT({end:Date.now()+d.rest*1000,total:d.rest});
+  const nav=[['log','Workout',Dumbbell],['progress','Progress',TrendingUp],['settings','Settings',Settings]];
+  return html`<div className="h-full flex flex-col text-chalk">
+    <header className="px-4 pb-2 flex items-center justify-between" style=${{paddingTop:'calc(env(safe-area-inset-top) + 12px)'}}>
+      <h1 className="text-2xl font-extrabold">${nav.find(n=>n[0]===tab)[1]}</h1>
+      ${d.active&&tab!=='log'&&html`<button className="text-sm text-plate font-semibold" onClick=${()=>setTab('log')}>Workout in progress</button>`}
+    </header>
+    <main className="flex-1 overflow-y-auto px-4 pb-6 pt-2">
+      ${tab==='log'&&html`<${Log} d=${d} upd=${upd} rest=${rest}/>`}
+      ${tab==='progress'&&html`<${Progress} d=${d}/>`}
+      ${tab==='settings'&&html`<${Prefs} d=${d} upd=${upd} setD=${setD}/>`}
+    </main>
+    ${t&&html`<${RestBar} t=${t} clear=${()=>setT(null)} add=${s=>setT(x=>({...x,end:x.end+s*1000,total:Math.max(15,x.total+s)}))}/>`}
+    <nav className="grid grid-cols-3 bg-steel border-t border-rail" style=${{paddingBottom:'env(safe-area-inset-bottom)'}}>
+      ${nav.map(([k,lbl,Ic])=>html`<button key=${k} className=${'py-2.5 flex flex-col items-center gap-0.5 text-xs '+(tab===k?'text-plate':'text-chalk/50')} onClick=${()=>setTab(k)}><${Ic} size=${22}/>${lbl}</button>`)}
+    </nav>
+  </div>`;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(html`<${App}/>`);
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+</script>
+</body>
+</html>
