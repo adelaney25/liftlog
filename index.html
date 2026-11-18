@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>LiftLog</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LiftLog">
+<meta name="format-detection" content="telephone=no">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<script src="https://cdn.tailwindcss.com/3.4.17" crossorigin="anonymous"></script>
+<script>tailwind.config={theme:{extend:{colors:{bg:'#000',card:'#1c1c1e',fill:'#2c2c2e',sep:'#38383a',sub:'#98989f',blue:'#0a84ff',green:'#30d158',red:'#ff453a',orange:'#ff9f0a'}}}}</script>
+<script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide-react@0.383.0/dist/umd/lucide-react.min.js" crossorigin="anonymous"></script>
+<style>
+html,body,#root{height:100%}
+body{background:#000;color:#fff;overscroll-behavior:none;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif}
+input,select{font-size:17px;font-family:inherit;-webkit-user-select:text;user-select:text;-webkit-appearance:none;appearance:none}
+button{touch-action:manipulation}
+button:active{opacity:.55}
+button:disabled{opacity:1}
+.blur{background:rgba(28,28,30,.85);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px)}
+.sheet{animation:up .3s cubic-bezier(.2,.8,.2,1)}
+@keyframes up{from{transform:translateY(100%)}}
+.ns::-webkit-scrollbar{display:none}
+@media(prefers-reduced-motion:reduce){.sheet{animation:none}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const {useState,useEffect,useMemo}=React;
+const html=htm.bind(React.createElement);
+const L=window.lucideReact||window.LucideReact||{};
+const [Dumbbell,TrendingUp,Settings,Plus,Trash2,Check,X,Download,Upload,Search,ChevronRight,Timer]=['Dumbbell','TrendingUp','Settings','Plus','Trash2','Check','X','Download','Upload','Search','ChevronRight','Timer'].map(n=>L[n]||(()=>null));
+
+const LIB={Chest:["Bench Press","Incline Bench Press","Dumbbell Bench Press","Chest Fly","Dip"],Back:["Deadlift","Barbell Row","Dumbbell Row","Pull-up","Chin-up","Lat Pulldown","Seated Cable Row"],Legs:["Barbell Squat","Front Squat","Leg Press","Romanian Deadlift","Sumo Deadlift","Hip Thrust","Leg Curl","Leg Extension","Calf Raise"],Shoulders:["Overhead Press","Dumbbell Shoulder Press","Lateral Raise","Face Pull"],Arms:["Biceps Curl","Triceps Pushdown","Skull Crusher"],Core:["Plank","Hanging Leg Raise","Cable Crunch"]};
+const GROUPS=[...Object.keys(LIB),'Other'];
+const EQ=['Barbell','Dumbbell','Machine','Cable','Bodyweight','Other'];
+const BUILT=Object.entries(LIB).flatMap(([group,a])=>a.map(name=>({name,group})));
+const allEx=d=>[...BUILT,...d.custom.map(c=>({...c,custom:true}))];
+const KEY='liftlog.v1';
+const DEF={sessions:[],active:null,unit:'lb',rest:90,custom:[]};
+const load=()=>{try{const d={...DEF,...JSON.parse(localStorage.getItem(KEY)||'{}')};d.custom=d.custom.map(c=>typeof c==='string'?{name:c,group:'Other',equip:'Other'}:c);return d}catch(e){return{...DEF}}};
+const e1=(w,r)=>r<=1?w:w*(1+r/30);
+const fmt=n=>Math.round(n*10)/10;
+const fd=s=>new Date(s).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+const lastSets=(ss,name)=>{for(let i=ss.length-1;i>=0;i--){const e=ss[i].exercises.find(x=>x.name===name);if(e&&e.sets.length)return e.sets}return[]};
+const clock=s=>{const h=Math.floor(s/3600),m=Math.floor(s%3600/60),c=String(s%60).padStart(2,'0');return h?`${h}:${String(m).padStart(2,'0')}:${c}`:`${m}:${c}`};
+const beep=()=>{try{const a=new(window.AudioContext||window.webkitAudioContext)(),o=a.createOscillator(),g=a.createGain();o.connect(g);g.connect(a.destination);g.gain.value=.15;o.frequency.value=880;o.start();o.stop(a.currentTime+.4)}catch(e){}try{navigator.vibrate&&navigator.vibrate([200,100,200])}catch(e){}};
+
+const Grp=({children,cls=''})=>html`<div className=${'bg-card rounded-2xl overflow-hidden divide-y divide-sep '+cls}>${children}</div>`;
+const Row=({onClick,children,cls=''})=>React.createElement(onClick?'button':'div',{className:'w-full flex items-center px-4 min-h-[48px] py-2 text-left text-[17px] '+cls,onClick},children);
+const Chips=({opts,val,set})=>html`<div className="flex flex-wrap gap-2">${opts.map(o=>html`<button key=${o} className=${'px-3.5 py-1.5 rounded-full text-[15px] '+(val===o?'bg-blue text-white':'bg-fill')} onClick=${()=>set(o)}>${o}</button>`)}</div>`;
+const Seg=({opts,val,set})=>html`<div className="flex bg-fill rounded-lg p-0.5">${opts.map(o=>html`<button key=${o} className=${'px-4 py-1 rounded-md text-[15px] font-semibold '+(val===o?'bg-sep':'text-sub')} onClick=${()=>set(o)}>${o}</button>`)}</div>`;
+const Big=({title,sub,right})=>html`<div className="px-4 pb-2 flex items-end justify-between" style=${{paddingTop:'calc(env(safe-area-inset-top) + 10px)'}}><div><div className="text-[34px] font-bold leading-tight">${title}</div>${sub&&html`<div className="text-sub text-[15px]">${sub}</div>`}</div>${right}</div>`;
+
+function Sheet({title,onClose,right,children}){
+  return html`<div className="fixed inset-0 z-30 flex items-end" style=${{background:'rgba(0,0,0,.55)'}} onClick=${onClose}>
+    <div className="sheet w-full bg-bg rounded-t-3xl flex flex-col border-t border-sep" style=${{height:'92%'}} onClick=${e=>e.stopPropagation()}>
+      <div className="flex items-center justify-between px-4 h-14 border-b border-sep shrink-0">
+        <button className="text-blue text-[17px] w-16 text-left" onClick=${onClose}>Cancel</button>
+        <div className="font-semibold text-[17px]">${title}</div>
+        <div className="w-16 text-right">${right}</div>
+      </div>
+      <div className="flex-1 overflow-y-auto" style=${{paddingBottom:'env(safe-area-inset-bottom)'}}>${children}</div>
+    </div></div>`;
+}
+
+function CustomSheet({d,init,seed,onSave,onDelete,onClose}){
+  const [n,setN]=useState(init?init.name:(seed||''));
+  const [g,setG]=useState(init?init.group:'Other');
+  const [e,setE]=useState(init?init.equip:'Barbell');
+  const nm=n.trim();
+  const dup=allEx(d).some(x=>x.name.toLowerCase()===nm.toLowerCase()&&(!init||x.name!==init.name));
+  const ok=nm&&!dup;
+  return html`<${Sheet} title=${init?'Edit exercise':'New exercise'} onClose=${onClose}
+    right=${html`<button className=${'font-semibold text-[17px] '+(ok?'text-blue':'text-sub')} disabled=${!ok} onClick=${()=>ok&&onSave({name:nm,group:g,equip:e})}>Save</button>`}>
+    <div className="p-4 space-y-6">
+      <div><${Grp}><input autoFocus className="w-full bg-transparent px-4 h-12 outline-none" placeholder="Exercise name" value=${n} onChange=${ev=>setN(ev.target.value)}/><//>
+        ${dup&&html`<div className="text-red text-[13px] mt-1.5 px-1">You already have an exercise with this name.</div>`}</div>
+      <div><div className="text-sub text-[13px] px-1 mb-2">Muscle group</div><${Chips} opts=${GROUPS} val=${g} set=${setG}/></div>
+      <div><div className="text-sub text-[13px] px-1 mb-2">Equipment</div><${Chips} opts=${EQ} val=${e} set=${setE}/></div>
+      ${init&&html`<div><${Grp}><${Row} cls="text-red justify-center" onClick=${()=>{if(confirm(`Delete ${init.name}? Past workouts keep their history.`))onDelete(init.name)}}>Delete exercise<//><//></div>`}
+    </div><//>`;
+}
+
+function Picker({d,api,onPick,onClose}){
+  const [q,setQ]=useState(''),[g,setG]=useState('All'),[mk,setMk]=useState(false);
+  const f=allEx(d).filter(e=>(g==='All'||e.group===g)&&e.name.toLowerCase().includes(q.trim().toLowerCase())).sort((a,b)=>a.name.localeCompare(b.name));
+  return html`<${React.Fragment}>
+    <${Sheet} title="Add exercise" onClose=${onClose}>
+      <div className="p-4 pb-2"><div className="flex items-center gap-2 bg-fill rounded-xl px-3"><${Search} size=${17} className="text-sub"/><input className="bg-transparent flex-1 h-10 outline-none" placeholder="Search" value=${q} onChange=${e=>setQ(e.target.value)}/></div></div>
+      <div className="flex gap-2 px-4 pb-3 overflow-x-auto ns">${['All',...GROUPS].map(x=>html`<button key=${x} className=${'px-3.5 py-1.5 rounded-full text-[15px] whitespace-nowrap '+(g===x?'bg-blue text-white':'bg-fill')} onClick=${()=>setG(x)}>${x}</button>`)}</div>
+      <div className="px-4 pb-8"><${Grp}>
+        <${Row} onClick=${()=>setMk(true)} cls="text-blue"><${Plus} size=${20} className="mr-3"/>Create custom exercise<//>
+        ${f.map(e=>html`<${Row} key=${e.name} onClick=${()=>onPick(e.name)}><div className="flex-1"><div>${e.name}</div><div className="text-sub text-[13px]">${e.group}${e.equip?' · '+e.equip:''}${e.custom?' · Custom':''}</div></div><//>`)}
+      <//></div>
+    <//>
+    ${mk&&html`<${CustomSheet} d=${d} seed=${q.trim()} onClose=${()=>setMk(false)} onSave=${c=>{api.save(c,null);onPick(c.name)}}/>`}
+  <//>`;
+}
+
+function Elapsed({start}){
+  const [n,setN]=useState(Date.now());
+  useEffect(()=>{const i=setInterval(()=>setN(Date.now()),1000);return()=>clearInterval(i)},[]);
+  return clock(Math.max(0,Math.floor((n-new Date(start))/1000)));
+}
+
+function SetRow({s,j,p,ei,upd,rest}){
+  const [w,setW]=useState(s.w===''||s.w==null?'':String(s.w));
+  const [r,setR]=useState(s.r===''||s.r==null?'':String(s.r));
+  const done=s.done!==false;
+  const sv=()=>upd(x=>{Object.assign(x.active.exercises[ei].sets[j],{w,r})});
+  const toggle=()=>{
+    if(done){upd(x=>{x.active.exercises[ei].sets[j].done=false});return}
+    let W=parseFloat(w),R=parseInt(r);
+    if(isNaN(W)&&p)W=p.w; if(isNaN(R)&&p)R=p.r;
+    if(isNaN(W)||!(R>0))return;
+    setW(String(W));setR(String(R));
+    upd(x=>{Object.assign(x.active.exercises[ei].sets[j],{w:W,r:R,done:true})});rest();
+  };
+  const inp='rounded-lg text-center font-semibold py-2 w-full outline-none '+(done?'bg-transparent':'bg-fill');
+  return html`<div className="grid grid-cols-[26px_1fr_68px_56px_36px] gap-2 items-center rounded-xl px-1 py-1" style=${{background:done?'rgba(48,209,88,.16)':'transparent'}}>
+    <div className="text-center text-sub font-semibold">${j+1}</div>
+    <button className="text-sub text-[15px] text-center" onClick=${()=>{if(p){setW(String(p.w));setR(String(p.r))}}}>${p?`${p.w} × ${p.r}`:'–'}</button>
+    <input inputMode="decimal" className=${inp} value=${w} onChange=${e=>setW(e.target.value)} onBlur=${sv} placeholder=${p?String(p.w):''}/>
+    <input inputMode="numeric" className=${inp} value=${r} onChange=${e=>setR(e.target.value)} onBlur=${sv} placeholder=${p?String(p.r):''}/>
+    <button aria-label=${done?'Mark not done':'Mark done'} className=${'w-9 h-9 rounded-full flex items-center justify-center '+(done?'bg-green text-black':'bg-fill text-sub')} onClick=${toggle}><${Check} size=${18} strokeWidth=${3}/></button>
+  </div>`;
+}
+
+function Ex({ex,ei,d,upd,rest}){
+  const prev=useMemo(()=>lastSets(d.sessions,ex.name),[d.sessions,ex.name]);
+  const g=(allEx(d).find(e=>e.name===ex.name)||{}).group;
+  const add=()=>upd(x=>{const e=x.active.exercises[ei],l=e.sets[e.sets.length-1],pv=prev[e.sets.length]||prev[prev.length-1];e.sets.push({w:l?l.w:(pv?pv.w:''),r:l?l.r:(pv?pv.r:''),done:false})});
+  return html`<div className="bg-card rounded-2xl p-3">
+    <div className="flex items-start justify-between px-1 mb-2">
+      <div><div className="text-blue font-semibold text-[18px]">${ex.name}</div>${g&&html`<div className="text-sub text-[13px]">${g}</div>`}</div>
+      <button aria-label="Remove exercise" className="p-1 text-sub" onClick=${()=>{if(!ex.sets.length||confirm('Remove this exercise and its sets?'))upd(x=>{x.active.exercises.splice(ei,1)})}}><${X} size=${20}/></button>
+    </div>
+    <div className="grid grid-cols-[26px_1fr_68px_56px_36px] gap-2 text-sub text-[12px] text-center px-1 mb-1"><div>Set</div><div>Previous</div><div>${d.unit}</div><div>Reps</div><div></div></div>
+    <div className="space-y-1">${ex.sets.map((s,j)=>html`<${SetRow} key=${j} s=${s} j=${j} p=${prev[j]} ei=${ei} upd=${upd} rest=${rest}/>`)}</div>
+    <div className="flex gap-2 mt-2">
+      <button className="flex-1 bg-fill rounded-xl py-2.5 font-semibold text-[15px]" onClick=${add}>+ Add set</button>
+      ${ex.sets.length>0&&html`<button aria-label="Remove last set" className="bg-fill rounded-xl px-4 text-red" onClick=${()=>upd(x=>{x.active.exercises[ei].sets.pop()})}><${Trash2} size=${17}/></button>`}
+    </div></div>`;
+}
+
+function Log({d,upd,api,rest}){
+  const [pick,setPick]=useState(false);
+  const a=d.active;
+  const addEx=n=>{upd(x=>{x.active.exercises.push({name:n,sets:[{w:'',r:'',done:false}]})});setPick(false)};
+  const vol=s=>s.exercises.reduce((t,e)=>t+e.sets.reduce((u,k)=>u+k.w*k.r,0),0);
+  if(!a){
+    const wk=d.sessions.filter(s=>Date.now()-new Date(s.date)<6048e5);
+    return html`<div>
+      <${Big} title="Workout"/>
+      <div className="px-4 space-y-4 pb-6">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-card rounded-2xl p-4"><div className="text-sub text-[13px]">Last 7 days</div><div className="text-[28px] font-bold">${wk.length}</div><div className="text-sub text-[13px]">workout${wk.length===1?'':'s'}</div></div>
+          <div className="bg-card rounded-2xl p-4"><div className="text-sub text-[13px]">Volume, last 7 days</div><div className="text-[28px] font-bold">${Math.round(wk.reduce((t,s)=>t+vol(s),0)).toLocaleString()}</div><div className="text-sub text-[13px]">${d.unit}</div></div>
+        </div>
+        <button className="w-full bg-blue rounded-2xl py-4 text-[18px] font-semibold flex items-center justify-center gap-2" onClick=${()=>upd(x=>{x.active={date:new Date().toISOString(),exercises:[]}})}><${Dumbbell} size=${22}/>Start workout</button>
+        <div className="text-sub text-[13px] px-1 -mb-2">Recent workouts</div>
+        ${d.sessions.length===0?html`<${Grp}><${Row} cls="text-sub">Finished workouts will show up here.<//><//>`:html`<${Grp}>${d.sessions.slice(-6).reverse().map(s=>html`<${Row} key=${s.id}><div className="flex-1 min-w-0"><div className="font-semibold">${fd(s.date)}</div><div className="text-sub text-[13px] truncate">${s.exercises.map(e=>e.name).join(', ')}</div></div><div className="text-sub text-[15px] ml-3">${s.exercises.reduce((t,e)=>t+e.sets.length,0)} sets</div><//>`)}<//>`}
+      </div></div>`;
+  }
+  const total=a.exercises.reduce((n,e)=>n+e.sets.filter(s=>s.done!==false).length,0);
+  const open=a.exercises.reduce((n,e)=>n+e.sets.filter(s=>s.done===false).length,0);
+  const finish=()=>{
+    if(!total){if(confirm('Discard this workout? No sets were completed.'))upd(x=>{x.active=null});return}
+    if(open&&!confirm(`${open} set${open>1?'s are':' is'} not checked off and will be dropped. Finish anyway?`))return;
+    upd(x=>{const ex=x.active.exercises.map(e=>({name:e.name,sets:e.sets.filter(s=>s.done!==false&&Number(s.r)>0).map(s=>({w:Number(s.w),r:Number(s.r)}))})).filter(e=>e.sets.length);x.sessions.push({id:Date.now(),date:x.active.date,exercises:ex});x.active=null});
+  };
+  return html`<div>
+    <${Big} title="Workout" sub=${html`<${Elapsed} start=${a.date}/>`} right=${html`<button className="bg-green text-black font-semibold rounded-full px-4 py-1.5 mb-1" onClick=${finish}>Finish</button>`}/>
+    <div className="px-4 space-y-3 pb-6">
+      ${a.exercises.map((e,i)=>html`<${Ex} key=${e.name+i} ex=${e} ei=${i} d=${d} upd=${upd} rest=${rest}/>`)}
+      <button className="w-full bg-card text-blue rounded-2xl py-3.5 font-semibold text-[17px] flex items-center justify-center gap-2" onClick=${()=>setPick(true)}><${Plus} size=${20}/>Add exercise</button>
+    </div>
+    ${pick&&html`<${Picker} d=${d} api=${api} onPick=${addEx} onClose=${()=>setPick(false)}/>`}
+  </div>`;
+}
+
+function Chart({pts,k,title,unit,color}){
+  const W=340,H=165,px=40,py=20;
+  const v=pts.map(x=>x[k]);let lo=Math.min(...v),hi=Math.max(...v);if(lo===hi){lo*=.9;hi=hi*1.1||1}
+  const n=pts.length;
+  const X=i=>n<2?W/2:px+i*(W-px-14)/(n-1),Y=y=>H-py-(y-lo)/(hi-lo)*(H-2*py-8);
+  const line=pts.map((q,i)=>(i?'L':'M')+X(i).toFixed(1)+','+Y(q[k]).toFixed(1)).join('');
+  const area=line+`L${X(n-1)},${H-py}L${X(0)},${H-py}Z`;
+  return html`<div className="bg-card rounded-2xl p-4">
+    <div className="flex justify-between items-baseline"><div className="font-semibold">${title}</div><div><span className="text-[26px] font-bold" style=${{color}}>${fmt(v[n-1])}</span> <span className="text-sub text-[14px]">${unit}</span></div></div>
+    <svg viewBox="0 0 ${W} ${H}" className="w-full mt-2">
+      <defs><linearGradient id=${'g'+k} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor=${color} stopOpacity=".35"/><stop offset="1" stopColor=${color} stopOpacity="0"/></linearGradient></defs>
+      <line x1=${px} x2=${W-8} y1=${Y(hi)} y2=${Y(hi)} stroke="#38383a" strokeDasharray="3 4"/><line x1=${px} x2=${W-8} y1=${H-py} y2=${H-py} stroke="#38383a"/>
+      ${n>1&&html`<path d=${area} fill=${'url(#g'+k+')'}/>`}
+      <path d=${line} fill="none" stroke=${color} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round"/>
+      ${pts.map((q,i)=>html`<circle key=${i} cx=${X(i)} cy=${Y(q[k])} r=${i===n-1?5:3.5} fill=${color}/>`)}
+      <text x=${px-6} y=${Y(hi)+4} fill="#98989f" fontSize="11" textAnchor="end">${Math.round(hi)}</text>
+      <text x=${px-6} y=${H-py+4} fill="#98989f" fontSize="11" textAnchor="end">${Math.round(lo)}</text>
+      <text x=${X(0)} y=${H-4} fill="#98989f" fontSize="11" textAnchor=${n>1?'start':'middle'}>${fd(pts[0].date)}</text>
+      ${n>1&&html`<text x=${X(n-1)} y=${H-4} fill="#98989f" fontSize="11" textAnchor="end">${fd(pts[n-1].date)}</text>`}
+    </svg></div>`;
+}
+
+function Progress({d}){
+  const names=[...new Set(d.sessions.flatMap(s=>s.exercises.map(e=>e.name)))].sort();
+  const [n,setN]=useState(names[0]||'');
+  if(!names.length)return html`<div><${Big} title="Progress"/><div className="px-4"><${Grp}><${Row} cls="text-sub">Finish a workout to see your estimated 1RM and volume.<//><//></div></div>`;
+  const name=names.includes(n)?n:names[0];
+  const pts=[...d.sessions].sort((a,b)=>new Date(a.date)-new Date(b.date)).filter(s=>s.exercises.some(e=>e.name===name)).map(s=>{
+    const sets=s.exercises.filter(e=>e.name===name).flatMap(e=>e.sets);
+    return{date:s.date,e1:Math.max(...sets.map(t=>e1(t.w,t.r))),vol:sets.reduce((a,t)=>a+t.w*t.r,0)}});
+  const best=Math.max(...pts.map(p=>p.e1));
+  return html`<div><${Big} title="Progress"/>
+    <div className="px-4 space-y-3 pb-6">
+      <div className="relative"><select className="w-full bg-card rounded-2xl px-4 h-12 font-semibold text-[17px] outline-none" value=${name} onChange=${e=>setN(e.target.value)}>${names.map(x=>html`<option key=${x}>${x}</option>`)}</select><${ChevronRight} size=${18} className="absolute right-4 top-3.5 text-sub rotate-90 pointer-events-none"/></div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-card rounded-2xl p-4"><div className="text-sub text-[13px]">Best estimated 1RM</div><div className="text-[24px] font-bold">${fmt(best)} <span className="text-sub text-[14px] font-normal">${d.unit}</span></div></div>
+        <div className="bg-card rounded-2xl p-4"><div className="text-sub text-[13px]">Workouts</div><div className="text-[24px] font-bold">${pts.length}</div></div>
+      </div>
+      <${Chart} pts=${pts} k="e1" title="Estimated 1RM" unit=${d.unit} color="#0a84ff"/>
+      <${Chart} pts=${pts} k="vol" title="Volume per workout" unit=${d.unit} color="#30d158"/>
+      <div className="text-sub text-[13px] px-1">Estimated 1RM uses the Epley formula on your best set each workout. Volume is weight × reps added up across all sets.</div>
+    </div></div>`;
+}
+
+function Prefs({d,upd,setD,api}){
+  const [ed,setEd]=useState(null);
+  const exportData=async()=>{
+    const name=`liftlog-${new Date().toISOString().slice(0,10)}.json`;
+    const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
+    const file=new File([blob],name,{type:'application/json'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file]});return}catch(e){if(e.name==='AbortError')return}}
+    const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);
+  };
+  const importData=ev=>{
+    const f=ev.target.files[0];if(!f)return;
+    const rd=new FileReader();
+    rd.onload=()=>{try{const j=JSON.parse(rd.result);if(!Array.isArray(j.sessions))throw 0;
+      if(confirm(`Replace current data with this backup (${j.sessions.length} workouts)?`)){const m={...DEF,...j};m.custom=m.custom.map(c=>typeof c==='string'?{name:c,group:'Other',equip:'Other'}:c);setD(m)}}catch(e){alert('That file is not a valid LiftLog backup.')}};
+    rd.readAsText(f);ev.target.value='';
+  };
+  const sec=t=>html`<div className="text-sub text-[13px] px-4 mb-1.5 mt-6">${t}</div>`;
+  return html`<div><${Big} title="Settings"/>
+    <div className="px-4 pb-8">
+      ${sec('Training')}
+      <${Grp}>
+        <${Row}><div className="flex-1">Weight unit</div><${Seg} opts=${['lb','kg']} val=${d.unit} set=${u=>upd(x=>{x.unit=u})}/><//>
+        <${Row}><div className="flex-1">Default rest</div>
+          <button className="w-9 h-9 rounded-lg bg-fill text-xl" onClick=${()=>upd(x=>{x.rest=Math.max(15,x.rest-15)})}>−</button>
+          <div className="w-16 text-center font-semibold">${clock(d.rest)}</div>
+          <button className="w-9 h-9 rounded-lg bg-fill text-xl" onClick=${()=>upd(x=>{x.rest+=15})}>+</button><//>
+      <//>
+      ${sec('My exercises')}
+      <${Grp}>
+        ${d.custom.map(c=>html`<${Row} key=${c.name} onClick=${()=>setEd(c)}><div className="flex-1"><div>${c.name}</div><div className="text-sub text-[13px]">${c.group} · ${c.equip}</div></div><${ChevronRight} size=${18} className="text-sub"/><//>`)}
+        <${Row} onClick=${()=>setEd({})} cls="text-blue"><${Plus} size=${20} className="mr-3"/>New custom exercise<//>
+      <//>
+      ${sec('Backup')}
+      <${Grp}>
+        <${Row} onClick=${exportData} cls="text-blue"><${Download} size=${20} className="mr-3"/>Export backup<//>
+        <label className="w-full flex items-center px-4 min-h-[48px] text-[17px] text-blue"><${Upload} size=${20} className="mr-3"/>Import backup<input type="file" accept="application/json,.json" className="hidden" onChange=${importData}/></label>
+      <//>
+      <div className="text-sub text-[13px] px-4 mt-1.5">${d.sessions.length} workout${d.sessions.length===1?'':'s'} are stored on this device only. Export a backup now and then and save it to Files.</div>
+      <div className="mt-6"><${Grp}><${Row} cls="text-red justify-center" onClick=${()=>{if(confirm('Delete all workouts on this device? Export a backup first.'))setD({...DEF})}}>Delete all data<//><//></div>
+    </div>
+    ${ed&&html`<${CustomSheet} d=${d} init=${ed.name?ed:null} onClose=${()=>setEd(null)} onSave=${c=>{api.save(c,ed.name?ed:null);setEd(null)}} onDelete=${n=>{api.del(n);setEd(null)}}/>`}
+  </div>`;
+}
+
+function RestBar({t,clear,add}){
+  const [now,setNow]=useState(Date.now());
+  useEffect(()=>{const i=setInterval(()=>setNow(Date.now()),250);return()=>clearInterval(i)},[]);
+  const left=Math.max(0,Math.ceil((t.end-now)/1000));
+  useEffect(()=>{if(left===0){beep();const h=setTimeout(clear,3000);return()=>clearTimeout(h)}},[left===0]);
+  const C=2*Math.PI*17,frac=Math.min(1,left/t.total);
+  return html`<div className="blur mx-3 mb-2 rounded-2xl px-4 py-2.5 flex items-center gap-3 border border-sep">
+    <svg width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="17" fill="none" stroke="#38383a" strokeWidth="4"/><circle cx="22" cy="22" r="17" fill="none" stroke=${left?'#0a84ff':'#30d158'} strokeWidth="4" strokeLinecap="round" strokeDasharray=${C} strokeDashoffset=${C*(1-frac)} transform="rotate(-90 22 22)" style=${{transition:'stroke-dashoffset .25s linear'}}/></svg>
+    <div className="flex-1"><div className="text-[13px] text-sub">${left?'Rest':'Rest over'}</div><div className="text-[24px] font-bold leading-none">${left?clock(left):'Go lift'}</div></div>
+    <button className="bg-fill rounded-lg px-3 py-2 text-[15px] font-semibold" onClick=${()=>add(-15)}>−15</button>
+    <button className="bg-fill rounded-lg px-3 py-2 text-[15px] font-semibold" onClick=${()=>add(15)}>+15</button>
+    <button aria-label="Skip rest" className="bg-fill rounded-full w-9 h-9 flex items-center justify-center" onClick=${clear}><${X} size=${18}/></button>
+  </div>`;
+}
+
+function App(){
+  const [d,setD]=useState(load);
+  const [tab,setTab]=useState('log');
+  const [t,setT]=useState(null);
+  useEffect(()=>{try{localStorage.setItem(KEY,JSON.stringify(d))}catch(e){}},[d]);
+  const upd=f=>setD(x=>{const y=JSON.parse(JSON.stringify(x));f(y);return y});
+  const rest=()=>setT({end:Date.now()+d.rest*1000,total:d.rest});
+  const api={
+    save:(c,o)=>upd(x=>{if(o){x.custom=x.custom.map(k=>k.name===o.name?c:k);if(o.name!==c.name){const rn=e=>{if(e.name===o.name)e.name=c.name};x.sessions.forEach(s=>s.exercises.forEach(rn));if(x.active)x.active.exercises.forEach(rn)}}else x.custom.push(c)}),
+    del:n=>upd(x=>{x.custom=x.custom.filter(k=>k.name!==n)})
+  };
+  const nav=[['log','Workout',Dumbbell],['progress','Progress',TrendingUp],['settings','Settings',Settings]];
+  return html`<div className="h-full flex flex-col">
+    <main className="flex-1 overflow-y-auto">
+      ${tab==='log'&&html`<${Log} d=${d} upd=${upd} api=${api} rest=${rest}/>`}
+      ${tab==='progress'&&html`<${Progress} d=${d}/>`}
+      ${tab==='settings'&&html`<${Prefs} d=${d} upd=${upd} setD=${setD} api=${api}/>`}
+    </main>
+    ${t&&html`<${RestBar} t=${t} clear=${()=>setT(null)} add=${s=>setT(x=>({...x,end:x.end+s*1000,total:Math.max(15,x.total+s)}))}/>`}
+    <nav className="blur grid grid-cols-3 border-t border-sep" style=${{paddingBottom:'env(safe-area-inset-bottom)'}}>
+      ${nav.map(([k,lbl,Ic])=>html`<button key=${k} className=${'pt-2 pb-1.5 flex flex-col items-center gap-0.5 text-[10px] font-medium '+(tab===k?'text-blue':'text-sub')} onClick=${()=>setTab(k)}><${Ic} size=${25} strokeWidth=${tab===k?2.4:1.8}/>${lbl}</button>`)}
+    </nav>
+  </div>`;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(html`<${App}/>`);
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+</script>
+</body>
+</html>
